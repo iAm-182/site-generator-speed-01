@@ -234,12 +234,17 @@ const HAS_WS = /\s/;
 /** The one shared inline scanner; inline() resets lastIndex on entry and
  * restores it after every nested call, so sharing it is safe. */
 const INLINE_RX = /[\\`*\[&<>"']/g;
+/** Markup characters only (no escapes): text without one needs no inline
+ * scan at all, just escaping. */
+const MARKUP_TEST = /[\\`*[]/;
 
 function trimLT(s) {
   let a = 0;
   let b = s.length;
   while (a < b && (s[a] === ' ' || s[a] === '\t')) a++;
   while (b > a && (s[b - 1] === ' ' || s[b - 1] === '\t')) b--;
+  // Nothing to trim: hand the string back itself, not a slice view of it.
+  if (a === 0 && b === s.length) return s;
   return s.slice(a, b);
 }
 
@@ -283,6 +288,10 @@ function closeBracket(s, from) {
 
 /** `s` rendered inline; `link(target)` resolves a link's href. */
 function inline(s, link) {
+  // No markup character: the text needs only escaping, and esc() does that
+  // with a single test (returning the string itself when there is nothing
+  // to escape). This is the common case, and it skips the inline scan.
+  if (!MARKUP_TEST.test(s)) return esc(s);
   const rx = INLINE_RX;
   rx.lastIndex = 0;
   let out = '';
@@ -748,7 +757,9 @@ function pageOf(s, card) {
     ...card,
     slug: s.slug,
     content: s.html,
-    toc: s.toc.map((h) => ({ level: h.level, id: h.id, html: h.html })),
+    // renderMD's toc entries already are { level, id, html } in that order,
+    // so share them instead of mapping a fresh array of fresh objects.
+    toc: s.toc,
     newer: linkOf(s.newer === undefined ? null : s.newer),
     older: linkOf(s.older === undefined ? null : s.older),
     is_post: s.post,
